@@ -1,0 +1,211 @@
+# Funnel 1: métricas por período (prospectos, agendamientos, presupuestos, contratos)
+from datetime import datetime, timedelta
+from typing import Any, Dict, List, Optional, Set
+
+from .config import id_cliente_canonico, normalizar_linea, normalizar_telefono
+from .funnel_dates import (
+    get_period_end,
+    get_period_start,
+    is_within_interval,
+    period_key,
+    period_label,
+    to_date,
+)
+
+
+def _to_records(df):
+    if df is None or (hasattr(df, "empty") and df.empty):
+        return []
+    if hasattr(df, "to_dict"):
+        return df.to_dict("records")
+    return list(df)
+
+
+def compute_funnel1(data: Dict[str, Any], params: Dict[str, Any]) -> List[Dict]:
+    from_ = params.get("from") or ""
+    to = params.get("to") or ""
+    granularity = (params.get("granularity") or "month").lower()
+    linea = (params.get("linea") or "").strip() or None
+
+    from_date = get_period_start(from_, granularity)
+    to_limit = to_date(to)
+    range_end = get_period_end(to_limit, granularity)
+    last_period_start = get_period_start(to, granularity)
+
+    linea_norm = normalizar_linea(linea) if linea else ""
+    pautas = _to_records(data.get("pautas"))
+    agendamientos = _to_records(data.get("agendamientos"))
+    clientes = _to_records(data.get("clientes"))
+    presupuestos_contratos = _to_records(data.get("presupuestosContratos"))
+    clientes_y_telefonos = data.get("clientesYTelefonos") or {}
+
+    if linea_norm:
+        pautas = [p for p in pautas if p.get("linea") and normalizar_linea(p.get("linea")) == linea_norm]
+        agendamientos = [a for a in agendamientos if a.get("linea") and normalizar_linea(a.get("linea")) == linea_norm]
+
+    agendamientos_in_range = [
+        a for a in agendamientos
+        if is_within_interval(to_date(a["fecha_agendamiento"]), from_date, range_end)
+    ]
+
+    clientes_map = {id_cliente_canonico(c.get("id")): c for c in clientes if id_cliente_canonico(c.get("id"))}
+
+    presupuestos_in_range = []
+    for pc in presupuestos_contratos:
+        d_pres = to_date(pc["fecha_presupuesto"]) if pc.get("fecha_presupuesto") else None
+        d_cont = to_date(pc["fecha_contrato"]) if pc.get("fecha_contrato") else d_pres
+        en_rango = (d_pres and is_within_interval(d_pres, from_date, range_end)) or (d_cont and is_within_interval(d_cont, from_date, range_end))
+        if not en_rango:
+            continue
+        cid = id_cliente_canonico(pc.get("id_prospecto"))
+        if not cid:
+            continue
+        if linea_norm:
+            cli = clientes_map.get(cid)
+            if cli and cli.get("linea") is not None and normalizar_linea(cli["linea"]) != linea_norm:
+                continue
+        presupuestos_in_range.append(pc)
+
+    periods: Dict[str, Dict] = {}
+
+    def ensure_period(d: datetime) -> Dict:
+        key = period_key(d, granularity)
+        if key not in periods:
+            periods[key] = {
+                "period": key,
+                "label": period_label(d, granularity),
+                "prospectos": set(),
+                "pautas_list": [],
+                "agendamientos": set(),
+                "presupuestos": set(),
+                "contratos": set(),
+                "contratos_total": 0,
+            }
+        return periods[key]
+
+    for p in pautas:
+        d = to_date(p["fecha_contacto"])
+        if not is_within_interval(d, from_date, range_end):
+            continue
+        rec = ensure_period(d)
+        pid = p.get("id_prospecto")
+        if pid:
+            rec["prospectos"].add(pid)
+        rec["pautas_list"].append(p)
+
+    for a in agendamientos_in_range:
+        d = to_date(a["fecha_agendamiento"])
+        rec = ensure_period(d)
+        cid = id_cliente_canonico(a.get("id_prospecto"))
+        if cid:
+            rec["agendamientos"].add(cid)
+
+    primer_presupuesto = {}
+    for pc in presupuestos_in_range:
+        cid = id_cliente_canonico(pc.get("id_prospecto"))
+        if not cid or not pc.get("fecha_presupuesto"):
+            continue
+        d = to_date(pc["fecha_presupuesto"])
+        if cid not in primer_presupuesto or d < to_date(primer_presupuesto[cid]["fecha_presupuesto"]):
+            primer_presupuesto[cid] = pc
+
+    for pc in primer_presupuesto.values():
+        d = to_date(pc["fecha_presupuesto"])
+        if not is_within_interval(d, from_date, range_end):
+            continue
+        rec = ensure_period(d)
+        cid = id_cliente_canonico(pc.get("id_prospecto"))
+        if cid not in rec["agendamientos"]:
+            continue
+        rec["presupuestos"].add(cid)
+
+    clientes_con_contrato = [
+        c for c in clientes
+        if id_cliente_canonico(c.get("id"))
+        and c.get("tiene_contrato")
+        and c.get("contract_date")
+        and c.get("control_calidad_confirmado", True) is not False
+        and c.get("es_titular", True) is not False
+        and is_within_interval(to_date(c["contract_date"]), from_date, range_end)
+        and (not linea_norm or (c.get("linea") and normalizar_linea(c["linea"]) == linea_norm))
+    ]
+
+    contratos_unicos_por_periodo: Dict[str, Set[str]] = {}
+    for c in clientes_con_contrato:
+        cid = id_cliente_canonico(c["id"])
+        d = to_date(c["contract_date"])
+        rec = ensure_period(d)
+        rec["contratos_total"] = rec.get("contratos_total", 0) + 1
+        rec["contratos"].add(cid)
+        if rec["period"] not in contratos_unicos_por_periodo:
+            contratos_unicos_por_periodo[rec["period"]] = set()
+        contratos_unicos_por_periodo[rec["period"]].add(cid)
+
+    if not clientes_con_contrato and not clientes:
+        for pc in presupuestos_in_range:
+            if pc.get("fecha_contrato") or pc.get("tiene_contrato"):
+                d = to_date(pc.get("fecha_contrato") or pc.get("fecha_presupuesto"))
+                if d and is_within_interval(d, from_date, range_end):
+                    rec = ensure_period(d)
+                    rec["contratos_total"] = rec.get("contratos_total", 0) + 1
+                    rec["contratos"].add(id_cliente_canonico(pc.get("id_prospecto")))
+
+    # Rellenar períodos vacíos
+    cur = from_date
+    while cur <= last_period_start:
+        ensure_period(cur)
+        if granularity == "day":
+            cur += timedelta(days=1)
+        elif granularity == "week":
+            cur += timedelta(days=7)
+        else:
+            if cur.month == 12:
+                cur = cur.replace(year=cur.year + 1, month=1, day=1, hour=0, minute=0, second=0, microsecond=0)
+            else:
+                cur = cur.replace(month=cur.month + 1, day=1, hour=0, minute=0, second=0, microsecond=0)
+
+    result = []
+    for key in sorted(periods.keys()):
+        r = periods[key]
+        agendamientos_canon = {id_cliente_canonico(x) for x in r["agendamientos"] if id_cliente_canonico(x)}
+        phones_agendamientos = set()
+        for cid in agendamientos_canon:
+            tels = clientes_y_telefonos.get(cid)
+            if tels:
+                phones_agendamientos.update(tels if isinstance(tels, (set, list)) else [tels])
+
+        prospectos_agendados_set = set()
+        for p in r.get("pautas_list") or []:
+            id_canon = id_cliente_canonico(p.get("id_prospecto"))
+            if id_canon and id_canon in agendamientos_canon:
+                prospectos_agendados_set.add("id:" + id_canon)
+            elif p.get("telefono") and p["telefono"] in phones_agendamientos:
+                prospectos_agendados_set.add("tel:" + p["telefono"])
+
+        prospecto_phones = {p["telefono"] for p in (r.get("pautas_list") or []) if p.get("telefono")}
+        prospecto_ids = {id_cliente_canonico(p.get("id_prospecto")) for p in (r.get("pautas_list") or []) if (id_cliente_canonico(p.get("id_prospecto")) or "").isdigit()}
+        prospecto_client_ids = set(prospecto_ids)
+        for cid, tels in (clientes_y_telefonos or {}).items():
+            if not tels:
+                continue
+            t = list(tels) if isinstance(tels, set) else [tels]
+            if any(ph in prospecto_phones for ph in t):
+                prospecto_client_ids.add(cid)
+
+        presupuestos_de_prospectos = sum(1 for x in r["presupuestos"] if x in prospecto_client_ids)
+        contratos_de_prospectos = sum(1 for x in r["contratos"] if x in prospecto_client_ids)
+
+        result.append({
+            "period": r["period"],
+            "label": r["label"],
+            "prospectos": len(r["prospectos"]),
+            "prospectos_agendados": len(prospectos_agendados_set),
+            "agendamientos": len(r["agendamientos"]),
+            "presupuestos": len(r["presupuestos"]),
+            "presupuestos_de_prospectos": presupuestos_de_prospectos,
+            "contratos": r.get("contratos_total") or len(r["contratos"]),
+            "contratos_de_prospectos": contratos_de_prospectos,
+            "clientes_unicos": len(r["contratos"]),
+            "clientes_unicos_de_prospectos": contratos_de_prospectos,
+        })
+    return result

@@ -1,0 +1,287 @@
+/* Shared with FunnelView */
+.section {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 1.25rem 1.5rem;
+  margin-bottom: 1.5rem;
+}
+
+.title {
+  margin: 0 0 0.25rem 0;
+  font-size: 1.15rem;
+  font-weight: 600;
+}
+
+.subtitle {
+  margin: 0 0 1rem 0;
+  font-size: 0.85rem;
+  color: var(--text-muted);
+}
+
+.empty {
+  padding: 2rem;
+  text-align: center;
+  color: var(--text-muted);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.tableWrap {
+  overflow-x: auto;
+  margin-top: 1.5rem;
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.9rem;
+}
+
+.table th,
+.table td {
+  padding: 0.5rem 0.75rem;
+  text-align: left;
+  border-bottom: 1px solid var(--border);
+}
+
+.table th {
+  color: var(--text-muted);
+  font-weight: 600;
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+
+.table tbody tr:hover {
+  background: rgba(255, 255, 255, 0.03);
+}
+
+/* Funnel horizontal bars (SALES FUNNEL style) */
+.funnelWrap {
+  margin-bottom: 1.25rem;
+}
+
+/* Colores por etapa (para "otros" y para barra única) */
+/* Etapa 1: Prospectos - amarillo a naranja */
+.funnelWrap [data-stage="1"] .barSegment.solo {
+  background: linear-gradient(90deg, #fef08a 0%, #f59e0b 100%);
+}
+/* Etapa 2: Agendamientos - naranja */
+.funnelWrap [data-stage="2"] .barSegment.otros,
+.funnelWrap [data-stage="2"] .barSegment.solo {
+  background: linear-gradient(90deg, #fb923c 0%, #ea580c 100%);
+}
+/* Etapa 3: Presupuestos - rosa a magenta */
+.funnelWrap [data-stage="3"] .barSegment.otros,
+.funnelWrap [data-stage="3"] .barSegment.solo {
+  background: linear-gradient(90deg, #f472b6 0%, #db2777 100%);
+}
+/* Etapa 4: Contratos - violeta */
+.funnelWrap [data-stage="4"] .barSegment.otros,
+.funnelWrap [data-stage="4"] .barSegment.solo {
+  background: linear-gradient(90deg, #c084fc 0%, #9333ea 100%);
+}
+/* Etapa 5: Clientes únicos - púrpura */
+.funnelWrap [data-stage="5"] .barSegment.otros,
+.funnelWrap [data-stage="5"] .barSegment.solo {
+  background: linear-gradient(90deg, #a78bfa 0%, #6d28d9 100%);
+}
+
+/* "De prospectos" usa el color de la etapa ANTERIOR (mismo que la barra de arriba) */
+.funnelWrap .barSegment.deProspectos[data-color-stage="0"] {
+  background: linear-gradient(90deg, #fef08a 0%, #f59e0b 100%);
+}
+.funnelWrap .barSegment.deProspectos[data-color-stage="1"] {
+  background: linear-gradient(90deg, #fb923c 0%, #ea580c 100%);
+}
+.funnelWrap .barSegment.deProspectos[data-color-stage="2"] {
+  background: linear-gradient(90deg, #f472b6 0%, #db2777 100%);
+}
+.funnelWrap .barSegment.deProspectos[data-color-stage="3"] {
+  background: linear-gradient(90deg, #c084fc 0%, #9333ea 100%);
+}
+.funnelWrap .barSegment.deProspectos[data-color-stage="4"] {
+  background: linear-gradient(90deg, #a78bfa 0%, #6d28d9 100%);
+}
+
+/* Barra única al filtrar por categoría: META = color etapa anterior, Otras = color etapa actual */
+.funnelWrap [data-stage="2"] .barSegment.solo[data-segment-type="meta"] {
+  background: linear-gradient(90deg, #fef08a 0%, #f59e0b 100%);
+}
+.funnelWrap [data-stage="3"] .barSegment.solo[data-segment-type="meta"] {
+  background: linear-gradient(90deg, #fb923c 0%, #ea580c 100%);
+}
+.funnelWrap [data-stage="4"] .barSegment.solo[data-segment-type="meta"] {
+  background: linear-gradient(90deg, #f472b6 0%, #db2777 100%);
+}
+.funnelWrap [data-stage="5"] .barSegment.solo[data-segment-type="meta"] {
+  background: linear-gradient(90deg, #c084fc 0%, #9333ea 100%);
+}
+.funnelWrap [data-stage="2"] .barSegment.solo[data-segment-type="otras"] {
+  background: linear-gradient(90deg, #fed7aa 0%, #fdba74 100%);
+}
+.funnelWrap [data-stage="3"] .barSegment.solo[data-segment-type="otras"] {
+  background: linear-gradient(90deg, #fbcfe8 0%, #f9a8d4 100%);
+}
+.funnelWrap [data-stage="4"] .barSegment.solo[data-segment-type="otras"] {
+  background: linear-gradient(90deg, #e9d5ff 0%, #d8b4fe 100%);
+}
+.funnelWrap [data-stage="5"] .barSegment.solo[data-segment-type="otras"] {
+  background: linear-gradient(90deg, #ddd6fe 0%, #c4b5fd 100%);
+}
+
+.funnelTitle {
+  display: inline-block;
+  background: #1a1a1a;
+  color: #fff;
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  padding: 0.4rem 0.9rem;
+  border-radius: 9999px;
+  margin-bottom: 1rem;
+}
+
+.funnelBars {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.funnelRow {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  min-height: 2.5rem;
+}
+
+.funnelLabel {
+  flex: 0 0 160px;
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
+.stageName {
+  font-weight: 600;
+  font-size: 0.95rem;
+  color: var(--text);
+}
+
+.stageCount {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+}
+
+.segmentDetail {
+  font-weight: 400;
+  opacity: 0.9;
+}
+
+.barOuter {
+  flex: 1;
+  min-width: 80px;
+  max-width: 100%;
+  transition: width 0.35s ease-out;
+}
+
+.barInner {
+  display: flex;
+  flex-direction: row;
+  width: 100%;
+  height: 2.25rem;
+  border-radius: 9999px;
+  overflow: hidden;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12);
+}
+
+.barSegment {
+  height: 100%;
+  min-width: 2px;
+  transition: width 0.25s ease-out;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+}
+
+.segmentLabel,
+.segmentLabelSmall {
+  position: relative;
+  z-index: 1;
+  color: #fff;
+  font-weight: 700;
+  white-space: nowrap;
+  padding: 0.2rem 0.5rem;
+  font-size: 0.75rem;
+  border-radius: 4px;
+  /* Fondo oscuro para que números y % siempre legibles sobre cualquier color de barra */
+  background: rgba(0, 0, 0, 0.55);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.35);
+}
+
+.segmentLabelSmall {
+  font-size: 0.65rem;
+  padding: 0.15rem 0.35rem;
+}
+
+/* En segmentos muy claros el pill oscuro ya da contraste; texto blanco */
+.segmentLabelOnLight {
+  color: #fff;
+  background: rgba(0, 0, 0, 0.5);
+}
+
+.barSegment.deProspectos {
+  border-radius: 9999px 0 0 9999px;
+}
+
+.barSegment.otros {
+  border-radius: 0 9999px 9999px 0;
+}
+
+.barSegment.solo {
+  border-radius: 9999px;
+}
+
+/* First segment only: round left; last segment only: round right */
+.barInner .barSegment:first-child:last-child {
+  border-radius: 9999px;
+}
+
+.barInner .barSegment:first-child:not(:last-child) {
+  border-radius: 9999px 0 0 9999px;
+}
+
+.barInner .barSegment:last-child:not(:first-child) {
+  border-radius: 0 9999px 9999px 0;
+}
+
+.legend {
+  display: flex;
+  gap: 1.25rem;
+  margin-top: 0.75rem;
+  font-size: 0.8rem;
+  color: var(--text-muted);
+}
+
+.legendItem {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.legendSwatch {
+  width: 1rem;
+  height: 1rem;
+  border-radius: 4px;
+}
+
+.legendSwatch[data-type="de"] {
+  background: linear-gradient(135deg, #f59e0b 0%, #6d28d9 100%);
+}
+
+.legendSwatch[data-type="otros"] {
+  background: linear-gradient(135deg, #fb923c 0%, #c084fc 100%);
+}

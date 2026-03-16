@@ -1,0 +1,49 @@
+# Archivos Excel (datos sensibles / no versionar)
+*.xlsx
+*.xls
+
+# Carpeta data: solo ignorar Excel; README.md se sube
+# (Los .xlsx ya están cubiertos por *.xlsx arriba)
+
+# Dependencias
+node_modules/
+frontend/node_modules/
+backend/node_modules/
+__pycache__/
+*.py[cod]
+*$py.class
+.Python
+backend_python/.venv/
+venv/
+.venv/
+env/
+
+# Builds
+frontend/dist/
+*.egg-info/
+*.egg
+
+# Entorno y secretos
+.env
+.env.local
+.env.*.local
+*.pem
+
+# IDE / Editor
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs y caché
+*.log
+npm-debug.log*
+.cache/
+
+# Docker (opcional: no subir imágenes locales)
+# *.tar
