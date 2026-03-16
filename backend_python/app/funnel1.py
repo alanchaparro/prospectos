@@ -43,6 +43,21 @@ def compute_funnel1(data: Dict[str, Any], params: Dict[str, Any]) -> List[Dict]:
         pautas = [p for p in pautas if p.get("linea") and normalizar_linea(p.get("linea")) == linea_norm]
         agendamientos = [a for a in agendamientos if a.get("linea") and normalizar_linea(a.get("linea")) == linea_norm]
 
+    # Índice: teléfono -> set de period_key donde ese tel aparece en Pautas (para prospectos viejos / otras fuentes)
+    pautas_all = _to_records(data.get("pautas"))
+    if linea_norm:
+        pautas_all = [p for p in pautas_all if p.get("linea") and normalizar_linea(p.get("linea")) == linea_norm]
+    telefono_a_periodos_pautas: Dict[str, Set[str]] = {}
+    for p in pautas_all:
+        tel = p.get("telefono")
+        if not tel or len(str(tel).strip()) < 8:
+            continue
+        d = to_date(p.get("fecha_contacto")) if p.get("fecha_contacto") else None
+        if not d:
+            continue
+        pk = period_key(d, granularity)
+        telefono_a_periodos_pautas.setdefault(tel, set()).add(pk)
+
     agendamientos_in_range = [
         a for a in agendamientos
         if is_within_interval(to_date(a["fecha_agendamiento"]), from_date, range_end)
@@ -195,6 +210,37 @@ def compute_funnel1(data: Dict[str, Any], params: Dict[str, Any]) -> List[Dict]:
         presupuestos_de_prospectos = sum(1 for x in r["presupuestos"] if x in prospecto_client_ids)
         contratos_de_prospectos = sum(1 for x in r["contratos"] if x in prospecto_client_ids)
 
+        # Clasificar clientes únicos del periodo: mismo_mes (ya en prospecto_client_ids), prospectos_viejos, otras_fuentes
+        periodo_actual = r["period"]
+        prospectos_viejos_set: Set[str] = set()
+        otras_fuentes_set: Set[str] = set()
+        for cid in r["contratos"]:
+            if cid in prospecto_client_ids:
+                continue  # ya contado como del mes (clientes_unicos_de_prospectos)
+            phones = clientes_y_telefonos.get(cid)
+            if not phones:
+                otras_fuentes_set.add(cid)
+                continue
+            teles = list(phones) if isinstance(phones, (set, list)) else [phones]
+            en_pautas_otro_mes = False
+            for tel in teles:
+                periodos_pauta = telefono_a_periodos_pautas.get(tel) or set()
+                if not periodos_pauta:
+                    continue
+                if periodo_actual in periodos_pauta:
+                    pass  # mismo mes ya está en prospecto_client_ids
+                else:
+                    en_pautas_otro_mes = True
+                    break
+            if en_pautas_otro_mes:
+                prospectos_viejos_set.add(cid)
+            else:
+                otras_fuentes_set.add(cid)
+
+        prospectos_viejos_count = len(prospectos_viejos_set)
+        otras_fuentes_count = len(otras_fuentes_set)
+        universo_total = len(r["prospectos"]) + prospectos_viejos_count + otras_fuentes_count
+
         result.append({
             "period": r["period"],
             "label": r["label"],
@@ -207,5 +253,8 @@ def compute_funnel1(data: Dict[str, Any], params: Dict[str, Any]) -> List[Dict]:
             "contratos_de_prospectos": contratos_de_prospectos,
             "clientes_unicos": len(r["contratos"]),
             "clientes_unicos_de_prospectos": contratos_de_prospectos,
+            "prospectos_viejos": prospectos_viejos_count,
+            "otras_fuentes": otras_fuentes_count,
+            "universo_total": universo_total,
         })
     return result

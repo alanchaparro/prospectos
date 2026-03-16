@@ -13,6 +13,8 @@ interface FunnelStage {
   total: number;
   deProspectos: number;
   otros: number;
+  /** Solo para Universo total: prospectos viejos (segmento medio) */
+  prospectosViejos?: number;
 }
 
 function aggregateStages(rows: Funnel1Row[]): FunnelStage[] {
@@ -20,6 +22,9 @@ function aggregateStages(rows: Funnel1Row[]): FunnelStage[] {
     rows.reduce((acc, r) => acc + (Number((r as unknown as Record<string, number>)[key]) || 0), 0);
 
   const prospectos = sum('prospectos');
+  const prospectosViejos = sum('prospectos_viejos');
+  const otrasFuentes = sum('otras_fuentes');
+  const universoTotal = sum('universo_total');
   const agendamientos = sum('agendamientos');
   const prospectosAgendados = sum('prospectos_agendados');
   const presupuestos = sum('presupuestos');
@@ -29,7 +34,17 @@ function aggregateStages(rows: Funnel1Row[]): FunnelStage[] {
   const clientesUnicos = sum('clientes_unicos');
   const clientesUnicosDeProspectos = sum('clientes_unicos_de_prospectos');
 
+  const universo = Math.max(universoTotal, prospectos + prospectosViejos + otrasFuentes);
+
   return [
+    {
+      key: 'universo',
+      label: 'Universo total',
+      total: universo,
+      deProspectos: prospectos,
+      prospectosViejos,
+      otros: otrasFuentes,
+    },
     {
       key: 'prospectos',
       label: 'Prospectos',
@@ -97,11 +112,20 @@ export function Funnel1View({ data, categoria = 'todas' }: Funnel1ViewProps) {
           {stages.map((stage, index) => {
             const metaCount = stage.deProspectos;
             const otrasCount = stage.otros;
+            const viejosCount = stage.prospectosViejos ?? 0;
             const metaPct = stage.total > 0 ? (metaCount / stage.total) * 100 : 0;
             const otrasPct = stage.total > 0 ? (otrasCount / stage.total) * 100 : 0;
-            const hasSegments = stage.otros > 0;
+            const viejosPct = stage.total > 0 ? (viejosCount / stage.total) * 100 : 0;
+            const hasSegments = stage.otros > 0 || viejosCount > 0;
+            const isUniverso = stage.prospectosViejos !== undefined;
 
-            const displayCount = categoria === 'meta' ? metaCount : categoria === 'otras' ? otrasCount : stage.total;
+            const displayCount = isUniverso && categoria === 'otras'
+              ? viejosCount + otrasCount
+              : categoria === 'meta'
+                ? metaCount
+                : categoria === 'otras'
+                  ? otrasCount
+                  : stage.total;
             const widthPct = maxTotal > 0 ? (Math.max(displayCount, 1) / maxTotal) * 100 : 0;
 
             return (
@@ -112,7 +136,9 @@ export function Funnel1View({ data, categoria = 'todas' }: Funnel1ViewProps) {
                     {stage.total.toLocaleString()}
                     {hasSegments && categoria === 'todas' && (
                       <span className={styles.segmentDetail}>
-                        {' '}({metaCount} META, {otrasCount} Otras fuentes)
+                        {isUniverso
+                          ? ` (${metaCount} Prospectos, ${viejosCount} Prospectos viejos, ${otrasCount} Otras fuentes)`
+                          : ` (${metaCount} META, ${otrasCount} Otras fuentes)`}
                       </span>
                     )}
                   </span>
@@ -122,13 +148,64 @@ export function Funnel1View({ data, categoria = 'todas' }: Funnel1ViewProps) {
                   style={{ width: `${Math.max(10, widthPct)}%` }}
                 >
                   <div className={styles.barInner} data-stage={index + 1}>
-                    {hasSegments && showMeta && showOtras ? (
+                    {isUniverso && (showMeta || showOtras) ? (
+                      (() => {
+                        const totalViejosOtras = viejosCount + otrasCount;
+                        const viejosPctNorm = totalViejosOtras > 0 ? (viejosCount / totalViejosOtras) * 100 : 0;
+                        const otrasPctNorm = totalViejosOtras > 0 ? (otrasCount / totalViejosOtras) * 100 : 0;
+                        const onlyViejosOtras = !showMeta && showOtras;
+                        return (
+                          <>
+                            {showMeta && (
+                              <div
+                                className={`${styles.barSegment} ${styles.deProspectos}`}
+                                style={{ width: `${metaPct}%` }}
+                                title={`Prospectos (mes): ${metaCount}`}
+                                data-color-stage={0}
+                              >
+                                {metaPct >= 6 && (
+                                  <span className={styles.segmentLabel}>
+                                    {metaCount.toLocaleString()} ({metaPct.toFixed(0)}%)
+                                  </span>
+                                )}
+                              </div>
+                            )}
+                            {viejosCount > 0 && (
+                              <div
+                                className={`${styles.barSegment} ${styles.prospectosViejos}`}
+                                style={{ width: `${onlyViejosOtras ? viejosPctNorm : viejosPct}%` }}
+                                title={`Prospectos viejos: ${viejosCount}`}
+                              >
+                                {(onlyViejosOtras ? viejosPctNorm : viejosPct) >= 6 && (
+                                  <span className={styles.segmentLabel}>
+                                    {viejosCount.toLocaleString()} ({(onlyViejosOtras ? viejosPctNorm : viejosPct).toFixed(0)}%)
+                                  </span>
+                                )}
+                              </div>
+                            )}
+                            {showOtras && (
+                              <div
+                                className={`${styles.barSegment} ${styles.otros}`}
+                                style={{ width: `${onlyViejosOtras ? otrasPctNorm : otrasPct}%` }}
+                                title={`Otras fuentes: ${otrasCount}`}
+                              >
+                                {(onlyViejosOtras ? otrasPctNorm : otrasPct) >= 6 && (
+                                  <span className={`${styles.segmentLabel} ${styles.segmentLabelOnLight}`}>
+                                    {otrasCount.toLocaleString()} ({(onlyViejosOtras ? otrasPctNorm : otrasPct).toFixed(0)}%)
+                                  </span>
+                                )}
+                              </div>
+                            )}
+                          </>
+                        );
+                      })()
+                    ) : hasSegments && showMeta && showOtras ? (
                       <>
                         <div
                           className={`${styles.barSegment} ${styles.deProspectos}`}
                           style={{ width: `${metaPct}%` }}
                           title={`META: ${metaCount} (${metaPct.toFixed(1)}%)`}
-                          data-color-stage={index}
+                          data-color-stage={index > 0 ? index - 1 : 0}
                         >
                           {metaPct >= 8 && (
                             <span className={styles.segmentLabel}>
@@ -160,10 +237,14 @@ export function Funnel1View({ data, categoria = 'todas' }: Funnel1ViewProps) {
                       <div
                         className={`${styles.barSegment} ${styles.solo}`}
                         style={{ width: '100%' }}
-                        data-segment-type={categoria === 'meta' ? 'meta' : categoria === 'otras' ? 'otras' : undefined}
+                        data-segment-type={
+                          isUniverso
+                            ? (categoria === 'meta' ? 'meta' : categoria === 'otras' ? 'otras' : 'universo')
+                            : (categoria === 'meta' ? 'meta' : categoria === 'otras' ? 'otras' : undefined)
+                        }
                       >
                         <span className={styles.segmentLabel}>
-                          {displayCount.toLocaleString()} ({categoria === 'todas' ? '100' : '100'}%)
+                          {(isUniverso && categoria === 'otras' ? viejosCount + otrasCount : displayCount).toLocaleString()} ({categoria === 'todas' ? '100' : '100'}%)
                         </span>
                       </div>
                     )}
@@ -175,7 +256,10 @@ export function Funnel1View({ data, categoria = 'todas' }: Funnel1ViewProps) {
         </div>
         <div className={styles.legend}>
           <span className={styles.legendItem}>
-            <span className={styles.legendSwatch} data-type="de" /> META
+            <span className={styles.legendSwatch} data-type="de" /> Prospectos (mes) / META
+          </span>
+          <span className={styles.legendItem}>
+            <span className={styles.legendSwatch} data-type="viejos" /> Prospectos viejos
           </span>
           <span className={styles.legendItem}>
             <span className={styles.legendSwatch} data-type="otros" /> Otras fuentes
@@ -188,7 +272,10 @@ export function Funnel1View({ data, categoria = 'todas' }: Funnel1ViewProps) {
           <thead>
             <tr>
               <th>Período</th>
+              <th>Universo total</th>
               <th>Prospectos</th>
+              <th>Prosp. viejos</th>
+              <th>Otras fuentes</th>
               <th>Agendados (META)</th>
               <th>Agendamientos</th>
               <th>Presupuestos</th>
@@ -203,7 +290,10 @@ export function Funnel1View({ data, categoria = 'todas' }: Funnel1ViewProps) {
             {safeData.map((row) => (
               <tr key={row.period}>
                 <td>{row.label}</td>
+                <td>{row.universo_total ?? row.prospectos + row.prospectos_viejos + row.otras_fuentes}</td>
                 <td>{row.prospectos}</td>
+                <td>{row.prospectos_viejos ?? 0}</td>
+                <td>{row.otras_fuentes ?? 0}</td>
                 <td>{row.prospectos_agendados}</td>
                 <td>{row.agendamientos}</td>
                 <td>{row.presupuestos}</td>

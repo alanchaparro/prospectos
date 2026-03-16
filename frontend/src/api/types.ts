@@ -12,6 +12,9 @@ export interface Funnel1Row {
   contratos_de_prospectos: number;
   clientes_unicos: number;
   clientes_unicos_de_prospectos: number;
+  prospectos_viejos: number;
+  otras_fuentes: number;
+  universo_total: number;
 }
 
 export interface Funnel2Row {
