@@ -41,6 +41,7 @@ Si los Excel no estan en `../data`, define `DATA_DIR`.
 - `POST /api/reload`
 - `GET /api/debug/headers`
 - `GET /api/debug/contratos`
+- `GET /api/debug/telefonos?prefix=961&limit=50&tiene_contrato=true`
 
 ## Tests
 

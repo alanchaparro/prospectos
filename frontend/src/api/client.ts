@@ -6,10 +6,12 @@ export async function fetchFunnel1(
   from: string,
   to: string,
   granularity: Granularity,
-  linea?: string
+  linea?: string,
+  supervisor?: string
 ): Promise<Funnel1Response> {
   const params = new URLSearchParams({ from, to, granularity });
   if (linea) params.set('linea', linea);
+  if (supervisor) params.set('supervisor', supervisor);
   const res = await fetch(`${API}/funnel1?${params}`);
   if (!res.ok) throw new Error(await res.text());
   return res.json();
@@ -17,6 +19,12 @@ export async function fetchFunnel1(
 
 export async function fetchLineas(): Promise<{ lineas: string[] }> {
   const res = await fetch(`${API}/lineas`);
+  if (!res.ok) throw new Error(await res.text());
+  return res.json();
+}
+
+export async function fetchSupervisores(): Promise<{ supervisores: string[] }> {
+  const res = await fetch(`${API}/supervisores`);
   if (!res.ok) throw new Error(await res.text());
   return res.json();
 }

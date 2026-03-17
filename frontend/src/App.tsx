@@ -4,7 +4,7 @@ import { Filters, type Categoria } from './components/Filters';
 import { Funnel1View } from './components/Funnel1View';
 import { KPICards } from './components/KPICards';
 import { LoadingOverlay } from './components/LoadingOverlay';
-import { fetchFunnel1, fetchLineas, healthCheck } from './api/client';
+import { fetchFunnel1, fetchLineas, fetchSupervisores, healthCheck } from './api/client';
 import type { Granularity, Funnel1Row } from './api/types';
 
 const defaultTo = format(new Date(), 'yyyy-MM-dd');
@@ -18,6 +18,8 @@ export default function App() {
   const [granularity, setGranularity] = useState<Granularity>('month');
   const [linea, setLinea] = useState('');
   const [lineas, setLineas] = useState<string[]>([]);
+  const [supervisor, setSupervisor] = useState('');
+  const [supervisores, setSupervisores] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [mock, setMock] = useState<boolean | null>(null);
@@ -35,7 +37,13 @@ export default function App() {
       effectiveTo = format(endOfMonth(d), 'yyyy-MM-dd');
     }
     try {
-      const r1 = await fetchFunnel1(effectiveFrom, effectiveTo, granularity, linea || undefined);
+      const r1 = await fetchFunnel1(
+        effectiveFrom,
+        effectiveTo,
+        granularity,
+        linea || undefined,
+        supervisor || undefined
+      );
       setFunnel1(Array.isArray(r1?.data) ? r1.data : []);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Error al cargar datos');
@@ -43,7 +51,7 @@ export default function App() {
     } finally {
       setLoading(false);
     }
-  }, [from, to, mesAnio, granularity, linea]);
+  }, [from, to, mesAnio, granularity, linea, supervisor]);
 
   useEffect(() => {
     healthCheck()
@@ -52,6 +60,9 @@ export default function App() {
     fetchLineas()
       .then((r) => setLineas(r.lineas || []))
       .catch(() => setLineas([]));
+    fetchSupervisores()
+      .then((r) => setSupervisores(r.supervisores || []))
+      .catch(() => setSupervisores([]));
   }, []);
 
   // Carga inicial solo al montar; el resto de veces se aplica al hacer clic en "Aplicar"
@@ -83,10 +94,13 @@ export default function App() {
         granularity={granularity}
         linea={linea}
         lineas={lineas}
+        supervisor={supervisor}
+        supervisores={supervisores}
         onFromChange={setFrom}
         onToChange={setTo}
         onGranularityChange={setGranularity}
         onLineaChange={setLinea}
+        onSupervisorChange={setSupervisor}
         onApply={load}
         loading={loading}
       />

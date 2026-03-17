@@ -358,8 +358,196 @@ def load_clientes_y_telefonos() -> Optional[dict]:
     return out if out else None
 
 
+def load_ventas_anho() -> Optional[pd.DataFrame]:
+    path = DATA_DIR / "ventas.xlsx"
+    if not path.exists():
+        return None
+    try:
+        df = pd.read_excel(path, sheet_name="ETL_Ventas_anho")
+    except Exception:
+        return None
+    if df.empty:
+        return None
+
+    cols = list(df.columns)
+    supervisor_col = find_column_key(cols, ["supervisor"]) or find_column_contains(cols, ["supervisor"])
+    vendedor_col = find_column_key(cols, ["vendedor"]) or find_column_contains(cols, ["vendedor"])
+    client_id_col = find_column_key(cols, ["Clientes_sql.client_id", "client_id"]) or find_column_contains(cols, ["client_id"])
+    contract_id_col = find_column_key(cols, ["Clientes_sql.contract_id", "contract_id"]) or find_column_contains(cols, ["contract_id"])
+    unidad_col = find_column_key(cols, ["Unidad Negocio", "unidad de negocio"]) or find_column_contains(cols, ["unidad", "negocio"])
+    fecha_col = find_column_key(cols, ["fecha_contrato"]) or find_column_contains(cols, ["fecha_contrato"])
+    estado_col = find_column_key(cols, ["Estado_new", "estado_contrato", "estado"]) or find_column_contains(cols, ["estado"])
+    number_col = find_column_key(cols, ["Clientes_sql.number", "number"]) or find_column_contains(cols, ["clientes_sql.number", "number"])
+    contact_col = find_column_key(cols, ["Clientes_sql.contact", "contact"]) or find_column_contains(cols, ["clientes_sql.contact", "contact"])
+
+    out = []
+    for _, row in df.iterrows():
+        supervisor = str(row.get(supervisor_col) or "").strip() if supervisor_col else ""
+        if not supervisor:
+            continue
+        vendedor = str(row.get(vendedor_col) or "").strip() if vendedor_col else ""
+        client_id = id_cliente_canonico(row.get(client_id_col)) if client_id_col and pd.notna(row.get(client_id_col)) else ""
+        contract_id = id_cliente_canonico(row.get(contract_id_col)) if contract_id_col and pd.notna(row.get(contract_id_col)) else ""
+        telefono_raw = row.get(number_col) if number_col else None
+        telefono = normalizar_telefono(telefono_raw)
+        if len(telefono) < 8 and contact_col:
+            telefono = normalizar_telefono(row.get(contact_col))
+        if not client_id and len(telefono) < 8:
+            continue
+        linea = _normalizar_linea_cliente(row.get(unidad_col)) if unidad_col else None
+        fecha_contrato = parse_date(row.get(fecha_col)) if fecha_col else None
+        estado = str(row.get(estado_col) or "").strip() if estado_col else ""
+        out.append(
+            {
+                "supervisor": supervisor,
+                "vendedor": vendedor,
+                "client_id": client_id,
+                "contract_id": contract_id,
+                "telefono": telefono if len(telefono) >= 8 else "",
+                "linea": linea,
+                "fecha_contrato": fecha_contrato,
+                "estado": estado,
+            }
+        )
+    return pd.DataFrame(out) if out else None
+
+
 _cache = {}
 _use_mock = False
+
+
+def _build_phone_registry(
+    pautas: pd.DataFrame,
+    agendamientos: pd.DataFrame,
+    clientes: pd.DataFrame,
+    clientes_y_telefonos: Optional[dict],
+    ventas: Optional[pd.DataFrame],
+) -> dict:
+    registry = {}
+
+    def ensure_phone(phone: str) -> dict:
+        return registry.setdefault(
+            phone,
+            {
+                "telefono": phone,
+                "client_ids": set(),
+                "tiene_contrato": False,
+                "fechas_contrato": set(),
+                "lineas": set(),
+                "agendado": False,
+                "total_agendamientos": 0,
+                "fechas_agendamiento": set(),
+                "en_pautas": False,
+                "total_pautas": 0,
+                "supervisores": set(),
+                "vendedores": set(),
+                "contract_ids": set(),
+            },
+        )
+
+    if pautas is not None and not pautas.empty and "telefono" in pautas.columns:
+        for _, row in pautas.iterrows():
+            tel = str(row.get("telefono") or "").strip()
+            if len(tel) < 8:
+                continue
+            entry = ensure_phone(tel)
+            entry["en_pautas"] = True
+            entry["total_pautas"] += 1
+            if pd.notna(row.get("linea")) and str(row.get("linea")).strip():
+                entry["lineas"].add(str(row.get("linea")).strip())
+
+    clientes_map = {}
+    if clientes is not None and not clientes.empty:
+        for _, row in clientes.iterrows():
+            cid = id_cliente_canonico(row.get("id"))
+            if not cid:
+                continue
+            clientes_map[cid] = {
+                "id": cid,
+                "tiene_contrato": bool(row.get("tiene_contrato")),
+                "contract_date": row.get("contract_date"),
+                "linea": row.get("linea"),
+                "control_calidad_confirmado": bool(row.get("control_calidad_confirmado", True)),
+                "es_titular": bool(row.get("es_titular", True)),
+            }
+
+    agendamientos_por_cliente = {}
+    if agendamientos is not None and not agendamientos.empty:
+        for _, row in agendamientos.iterrows():
+            cid = id_cliente_canonico(row.get("id_prospecto"))
+            if not cid:
+                continue
+            agendamientos_por_cliente.setdefault(cid, []).append(
+                {
+                    "fecha_agendamiento": row.get("fecha_agendamiento"),
+                    "linea": row.get("linea"),
+                }
+            )
+
+    for cid, telefonos in (clientes_y_telefonos or {}).items():
+        cid_canon = id_cliente_canonico(cid)
+        cliente = clientes_map.get(cid_canon)
+        for tel in telefonos or []:
+            tel_norm = normalizar_telefono(tel)
+            if len(tel_norm) < 8:
+                continue
+            entry = ensure_phone(tel_norm)
+            entry["client_ids"].add(cid_canon)
+            if cliente:
+                if cliente.get("linea"):
+                    entry["lineas"].add(str(cliente["linea"]).strip())
+                if (
+                    cliente.get("tiene_contrato")
+                    and cliente.get("control_calidad_confirmado", True)
+                    and cliente.get("es_titular", True)
+                ):
+                    entry["tiene_contrato"] = True
+                    if cliente.get("contract_date"):
+                        entry["fechas_contrato"].add(str(cliente["contract_date"]))
+            for agenda in agendamientos_por_cliente.get(cid_canon, []):
+                entry["agendado"] = True
+                entry["total_agendamientos"] += 1
+                if agenda.get("fecha_agendamiento"):
+                    entry["fechas_agendamiento"].add(str(agenda["fecha_agendamiento"]))
+                if agenda.get("linea"):
+                    entry["lineas"].add(str(agenda["linea"]).strip())
+
+    if ventas is not None and not ventas.empty:
+        for _, row in ventas.iterrows():
+            tel = str(row.get("telefono") or "").strip()
+            if len(tel) < 8:
+                continue
+            entry = ensure_phone(tel)
+            if row.get("supervisor"):
+                entry["supervisores"].add(str(row["supervisor"]).strip())
+            if row.get("vendedor"):
+                entry["vendedores"].add(str(row["vendedor"]).strip())
+            if row.get("contract_id"):
+                entry["contract_ids"].add(str(row["contract_id"]).strip())
+            if row.get("linea"):
+                entry["lineas"].add(str(row["linea"]).strip())
+            cid = id_cliente_canonico(row.get("client_id"))
+            if cid:
+                entry["client_ids"].add(cid)
+
+    out = {}
+    for tel, entry in registry.items():
+        out[tel] = {
+            "telefono": entry["telefono"],
+            "client_ids": sorted(entry["client_ids"]),
+            "tiene_contrato": entry["tiene_contrato"],
+            "fechas_contrato": sorted(entry["fechas_contrato"]),
+            "lineas": sorted(entry["lineas"]),
+            "agendado": entry["agendado"],
+            "total_agendamientos": entry["total_agendamientos"],
+            "fechas_agendamiento": sorted(entry["fechas_agendamiento"]),
+            "en_pautas": entry["en_pautas"],
+            "total_pautas": entry["total_pautas"],
+            "supervisores": sorted(entry["supervisores"]),
+            "vendedores": sorted(entry["vendedores"]),
+            "contract_ids": sorted(entry["contract_ids"]),
+        }
+    return out
 
 
 def get_datasets():
@@ -369,7 +557,15 @@ def get_datasets():
     pautas = load_pautas()
     if pautas is None or pautas.empty:
         _use_mock = True
-        _cache = {"pautas": pd.DataFrame(), "agendamientos": pd.DataFrame(), "presupuestosContratos": pd.DataFrame(), "clientes": pd.DataFrame(), "clientesYTelefonos": None}
+        _cache = {
+            "pautas": pd.DataFrame(),
+            "agendamientos": pd.DataFrame(),
+            "presupuestosContratos": pd.DataFrame(),
+            "clientes": pd.DataFrame(),
+            "clientesYTelefonos": None,
+            "ventas": pd.DataFrame(),
+            "telefonoIndex": {},
+        }
         return _cache
     _use_mock = False
     _ag = load_agendamientos()
@@ -379,12 +575,17 @@ def get_datasets():
     _cl = load_clientes()
     clientes = _cl if _cl is not None else pd.DataFrame()
     cyt = load_clientes_y_telefonos()
+    _ve = load_ventas_anho()
+    ventas = _ve if _ve is not None else pd.DataFrame()
+    telefono_index = _build_phone_registry(pautas, agendamientos, clientes, cyt, ventas)
     _cache = {
         "pautas": pautas,
         "agendamientos": agendamientos,
         "presupuestosContratos": presupuestos,
         "clientes": clientes,
         "clientesYTelefonos": cyt,
+        "ventas": ventas,
+        "telefonoIndex": telefono_index,
     }
     return _cache
 
@@ -412,3 +613,30 @@ def get_excel_headers() -> dict:
         except Exception as e:
             out[name] = {"error": str(e)}
     return out
+
+
+def get_phone_registry(prefix: str = "", limit: int = 100, tiene_contrato: Optional[bool] = None) -> list:
+    datasets = get_datasets()
+    registry = datasets.get("telefonoIndex") or {}
+    prefix_norm = normalizar_telefono(prefix) if prefix else ""
+    rows = []
+    for tel, entry in registry.items():
+        if prefix_norm and not tel.startswith(prefix_norm):
+            continue
+        if tiene_contrato is not None and bool(entry.get("tiene_contrato")) != bool(tiene_contrato):
+            continue
+        rows.append(entry)
+    rows.sort(key=lambda item: item.get("telefono") or "")
+    return rows[: max(1, limit)]
+
+
+def get_supervisores() -> list[str]:
+    datasets = get_datasets()
+    ventas = datasets.get("ventas")
+    if ventas is None or (hasattr(ventas, "empty") and ventas.empty):
+        return []
+    values = []
+    if hasattr(ventas, "columns") and "supervisor" in ventas.columns:
+        values = ventas["supervisor"].dropna().astype(str).str.strip().tolist()
+    supervisores = sorted({value for value in values if value})
+    return supervisores

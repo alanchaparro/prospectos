@@ -77,6 +77,26 @@ async def debug_contratos(
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@app.get("/api/debug/telefonos")
+async def debug_telefonos(
+    prefix: str = "",
+    limit: int = 100,
+    tiene_contrato: bool | None = None,
+):
+    try:
+        await ensure_data()
+        data = load_data.get_phone_registry(prefix=prefix, limit=limit, tiene_contrato=tiene_contrato)
+        return {
+            "prefix": prefix or None,
+            "limit": limit,
+            "tiene_contrato": tiene_contrato,
+            "count": len(data),
+            "data": data,
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @app.get("/api/lineas")
 async def get_lineas():
     try:
@@ -90,6 +110,15 @@ async def get_lineas():
         else:
             lineas = sorted({r.get("linea") for r in _to_records(pautas) if r.get("linea")})
         return {"lineas": lineas}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/supervisores")
+async def get_supervisores():
+    try:
+        await ensure_data()
+        return {"supervisores": load_data.get_supervisores()}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -108,6 +137,7 @@ async def get_funnel1(
     to: str = Query(None, alias="to"),
     granularity: str = "month",
     linea: str = None,
+    supervisor: str = None,
 ):
     if not from_ or not to:
         raise HTTPException(status_code=400, detail="Faltan parametros: from, to (YYYY-MM-DD)")
@@ -122,9 +152,19 @@ async def get_funnel1(
             "presupuestosContratos": _to_records(data.get("presupuestosContratos")),
             "clientes": _to_records(data.get("clientes")),
             "clientesYTelefonos": data.get("clientesYTelefonos"),
+            "ventas": _to_records(data.get("ventas")),
         }
-        result = funnel1.compute_funnel1(data, {"from": from_, "to": to, "granularity": granularity.lower(), "linea": linea})
-        return {"granularity": granularity.lower(), "linea": linea or None, "data": result}
+        result = funnel1.compute_funnel1(
+            data,
+            {
+                "from": from_,
+                "to": to,
+                "granularity": granularity.lower(),
+                "linea": linea,
+                "supervisor": supervisor,
+            },
+        )
+        return {"granularity": granularity.lower(), "linea": linea or None, "supervisor": supervisor or None, "data": result}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 

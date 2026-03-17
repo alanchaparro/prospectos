@@ -34,6 +34,7 @@ def compute_funnel1(data: Dict[str, Any], params: Dict[str, Any]) -> List[Dict]:
     to = params.get("to") or ""
     granularity = (params.get("granularity") or "month").lower()
     linea = (params.get("linea") or "").strip() or None
+    supervisor = (params.get("supervisor") or "").strip() or None
 
     from_date = get_period_start(from_, granularity)
     to_limit = to_date(to)
@@ -46,12 +47,36 @@ def compute_funnel1(data: Dict[str, Any], params: Dict[str, Any]) -> List[Dict]:
     clientes = _to_records(data.get("clientes"))
     presupuestos_contratos = _to_records(data.get("presupuestosContratos"))
     clientes_y_telefonos = data.get("clientesYTelefonos") or {}
+    ventas = _to_records(data.get("ventas"))
+
+    if supervisor:
+        ventas_supervisor = [v for v in ventas if str(v.get("supervisor") or "").strip() == supervisor]
+        if linea_norm:
+            ventas_supervisor = [v for v in ventas_supervisor if normalizar_linea(v.get("linea")) == linea_norm]
+        supervisor_client_ids = {
+            id_cliente_canonico(v.get("client_id")) for v in ventas_supervisor if id_cliente_canonico(v.get("client_id"))
+        }
+        supervisor_phones = {str(v.get("telefono")).strip() for v in ventas_supervisor if str(v.get("telefono") or "").strip()}
+        for cid in supervisor_client_ids:
+            supervisor_phones.update(_to_phone_set(clientes_y_telefonos.get(cid)))
+
+        pautas = [p for p in pautas if str(p.get("telefono") or "").strip() in supervisor_phones]
+        agendamientos = [a for a in agendamientos if id_cliente_canonico(a.get("id_prospecto")) in supervisor_client_ids]
+        presupuestos_contratos = [
+            pc for pc in presupuestos_contratos if id_cliente_canonico(pc.get("id_prospecto")) in supervisor_client_ids
+        ]
+        clientes = [c for c in clientes if id_cliente_canonico(c.get("id")) in supervisor_client_ids]
+        clientes_y_telefonos = {
+            cid: tels for cid, tels in clientes_y_telefonos.items() if id_cliente_canonico(cid) in supervisor_client_ids
+        }
 
     if linea_norm:
         pautas = [p for p in pautas if p.get("linea") and normalizar_linea(p.get("linea")) == linea_norm]
         agendamientos = [a for a in agendamientos if a.get("linea") and normalizar_linea(a.get("linea")) == linea_norm]
 
     pautas_all = _to_records(data.get("pautas"))
+    if supervisor:
+        pautas_all = [p for p in pautas_all if str(p.get("telefono") or "").strip() in supervisor_phones]
     if linea_norm:
         pautas_all = [p for p in pautas_all if p.get("linea") and normalizar_linea(p.get("linea")) == linea_norm]
 

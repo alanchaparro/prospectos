@@ -1,21 +1,30 @@
 import type { Granularity } from '../api/types';
 import styles from './Filters.module.css';
 
-/** Nombres mostrados para valores de Línea (el valor enviado al API no cambia). */
 const LINEA_DISPLAY_NAMES: Record<string, string> = {
   Epem: 'MEDICINA ESTETICA',
 };
 
 const MESES_NOMBRES: Record<number, string> = {
-  1: 'Enero', 2: 'Febrero', 3: 'Marzo', 4: 'Abril', 5: 'Mayo', 6: 'Junio',
-  7: 'Julio', 8: 'Agosto', 9: 'Septiembre', 10: 'Octubre', 11: 'Noviembre', 12: 'Diciembre',
+  1: 'Enero',
+  2: 'Febrero',
+  3: 'Marzo',
+  4: 'Abril',
+  5: 'Mayo',
+  6: 'Junio',
+  7: 'Julio',
+  8: 'Agosto',
+  9: 'Septiembre',
+  10: 'Octubre',
+  11: 'Noviembre',
+  12: 'Diciembre',
 };
 
 const currentYear = new Date().getFullYear();
 const MES_ANIO_OPCIONES: { value: string; label: string }[] = (() => {
-  const out: { value: string; label: string }[] = [{ value: '', label: '— Mes / Año —' }];
-  for (let y = currentYear - 2; y <= currentYear + 1; y++) {
-    for (let m = 1; m <= 12; m++) {
+  const out: { value: string; label: string }[] = [{ value: '', label: '--- Mes / Ano ---' }];
+  for (let y = currentYear - 2; y <= currentYear + 1; y += 1) {
+    for (let m = 1; m <= 12; m += 1) {
       const value = `${y}-${String(m).padStart(2, '0')}`;
       out.push({ value, label: `${MESES_NOMBRES[m]} ${y}` });
     }
@@ -39,10 +48,13 @@ interface FiltersProps {
   granularity: Granularity;
   linea: string;
   lineas: string[];
+  supervisor: string;
+  supervisores: string[];
   onFromChange: (v: string) => void;
   onToChange: (v: string) => void;
   onGranularityChange: (v: Granularity) => void;
   onLineaChange: (v: string) => void;
+  onSupervisorChange: (v: string) => void;
   onApply: () => void;
   loading?: boolean;
 }
@@ -57,10 +69,13 @@ export function Filters({
   granularity,
   linea,
   lineas,
+  supervisor,
+  supervisores,
   onFromChange,
   onToChange,
   onGranularityChange,
   onLineaChange,
+  onSupervisorChange,
   onApply,
   loading,
 }: FiltersProps) {
@@ -68,69 +83,64 @@ export function Filters({
     <section className={styles.filters}>
       <div className={styles.row}>
         <label>
-          <span>Categoría</span>
-          <select
-            value={categoria}
-            onChange={(e) => onCategoriaChange(e.target.value as Categoria)}
-          >
+          <span>Categoria</span>
+          <select value={categoria} onChange={(e) => onCategoriaChange(e.target.value as Categoria)}>
             <option value="todas">Todas</option>
             <option value="meta">META (prospectos)</option>
             <option value="otras">Otras fuentes</option>
           </select>
         </label>
         <label>
-          <span>Línea</span>
-          <select
-            value={linea}
-            onChange={(e) => onLineaChange(e.target.value)}
-          >
+          <span>Linea</span>
+          <select value={linea} onChange={(e) => onLineaChange(e.target.value)}>
             <option value="">Todas</option>
-            {lineas.map((l) => (
-              <option key={l} value={l}>{getLineaDisplayName(l)}</option>
+            {lineas.map((value) => (
+              <option key={value} value={value}>
+                {getLineaDisplayName(value)}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label>
+          <span>Supervisor</span>
+          <select value={supervisor} onChange={(e) => onSupervisorChange(e.target.value)}>
+            <option value="">Todos</option>
+            {supervisores.map((value) => (
+              <option key={value} value={value}>
+                {value}
+              </option>
             ))}
           </select>
         </label>
         <label className={styles.mesAnioLabel}>
-          <span>Mes / Año</span>
-          <select
-            value={mesAnio}
-            onChange={(e) => onMesAnioChange(e.target.value)}
-          >
+          <span>Mes / Ano</span>
+          <select value={mesAnio} onChange={(e) => onMesAnioChange(e.target.value)}>
             {MES_ANIO_OPCIONES.map((opt) => (
-              <option key={opt.value || 'empty'} value={opt.value}>{opt.label}</option>
+              <option key={opt.value || 'empty'} value={opt.value}>
+                {opt.label}
+              </option>
             ))}
           </select>
         </label>
         <label>
           <span>Desde</span>
-          <input
-            type="date"
-            value={from}
-            onChange={(e) => onFromChange(e.target.value)}
-          />
+          <input type="date" value={from} onChange={(e) => onFromChange(e.target.value)} />
         </label>
         <label>
           <span>Hasta</span>
-          <input
-            type="date"
-            value={to}
-            onChange={(e) => onToChange(e.target.value)}
-          />
+          <input type="date" value={to} onChange={(e) => onToChange(e.target.value)} />
         </label>
         <label>
           <span>Agrupar por</span>
-          <select
-            value={granularity}
-            onChange={(e) => onGranularityChange(e.target.value as Granularity)}
-          >
-            <option value="day">Día</option>
+          <select value={granularity} onChange={(e) => onGranularityChange(e.target.value as Granularity)}>
+            <option value="day">Dia</option>
             <option value="week">Semana</option>
             <option value="month">Mes</option>
           </select>
         </label>
         <button type="button" onClick={onApply} disabled={loading} className={styles.applyBtn}>
           {loading && <span className={styles.btnSpinner} aria-hidden />}
-          {loading ? 'Cargando…' : 'Aplicar'}
+          {loading ? 'Cargando...' : 'Aplicar'}
         </button>
       </div>
     </section>
