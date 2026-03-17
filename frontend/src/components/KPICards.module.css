@@ -71,10 +71,10 @@
   justify-content: center;
   width: 2rem;
   height: 2rem;
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.14);
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.04);
-  color: var(--text-muted);
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text);
   cursor: pointer;
   transition: background 0.18s ease, border-color 0.18s ease, color 0.18s ease;
 }
@@ -85,9 +85,10 @@
   color: var(--text);
 }
 
-.gearIcon {
-  width: 1rem;
-  height: 1rem;
+.gearGlyph {
+  display: inline-block;
+  font-size: 1rem;
+  line-height: 1;
 }
 
 .cardLabel {
@@ -131,11 +132,23 @@
 }
 
 .field select {
-  background: rgba(255, 255, 255, 0.04);
+  appearance: none;
+  background: #23232b;
   color: var(--text);
   border: 1px solid rgba(255, 255, 255, 0.1);
   border-radius: 10px;
   padding: 0.55rem 0.7rem;
+  color-scheme: dark;
+}
+
+.field select option {
+  background: #23232b;
+  color: var(--text);
+}
+
+.field select option:checked {
+  background: #2f6fd3;
+  color: #ffffff;
 }
 
 .settingsActions {
