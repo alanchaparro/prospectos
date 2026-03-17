@@ -90,6 +90,11 @@
 .funnelWrap .barSegment.solo[data-segment-type="meta"] {
   background: linear-gradient(90deg, #fbbf24 0%, #d97706 100%);
 }
+/* Barra única sin segmentos (ej. etapa 100% META o total): color visible para no confundir con el fondo */
+.funnelWrap .barSegment.solo:not([data-segment-type]),
+.funnelWrap .barSegment.solo[data-segment-type="universo"] {
+  background: linear-gradient(90deg, #fbbf24 0%, #d97706 100%);
+}
 
 .funnelTitle {
   display: inline-block;
