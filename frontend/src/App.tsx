@@ -110,7 +110,7 @@ export default function App() {
         <LoadingOverlay message="Cargando datos del embudo…" />
       ) : (
         <>
-          <KPICards data={funnel1} categoria={categoria} />
+          <KPICards data={funnel1} />
           <Funnel1View data={funnel1} categoria={categoria} />
         </>
       )}

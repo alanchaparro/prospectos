@@ -1,20 +1,21 @@
-# Embudo de ventas – Web
+# Embudo de ventas - Web
 
-Aplicación web para visualizar el funnel de ventas (prospectos → agendamientos → presupuestos → contratos) con dos vistas: métricas por período (Funnel 1) y conversión por coincidencias (Funnel 2).
+Aplicacion web para visualizar el funnel de ventas (prospectos -> agendamientos -> presupuestos -> contratos) con metricas por periodo.
 
 ## Requisitos
 
-- Node.js 20+
-- (Opcional) Docker y Docker Compose
+- Python 3.12+
+- Node.js 20+ (solo para el frontend)
+- Docker y Docker Compose (opcional)
 
-## Ejecución en local
+## Ejecucion en local
 
-### Backend
+### Backend Python
 
 ```bash
-cd backend
-npm install
-npm run dev
+cd backend_python
+pip install -r requirements.txt
+uvicorn app.main:app --host 0.0.0.0 --port 4000
 ```
 
 API en `http://localhost:4000`.
@@ -27,19 +28,19 @@ npm install
 npm run dev
 ```
 
-App en `http://localhost:3000`. El proxy de Vite redirige `/api` al backend.
+App en `http://localhost:3000`. El proxy de Vite redirige `/api` al backend Python.
 
 ### Datos
 
-- **Con Excel:** Coloca los archivos en la carpeta `data/`:
+- Con Excel: coloca los archivos en `data/`:
   - `Pautas-ThinkChat-2025-2026.xlsx`
   - `agendamientos-prospectos.xlsx`
   - `Presupuestos y contratos.xlsx`
-- **Sin Excel:** La app usa datos de prueba (mock) automáticamente.
+- Sin Excel: la app usa datos de prueba (mock).
 
 Ver `data/README.md` para el detalle de columnas esperadas.
 
-## Ejecución con Docker
+## Ejecucion con Docker
 
 ```bash
 docker compose up --build
@@ -51,31 +52,18 @@ docker compose up --build
 
 ## APIs
 
-- `GET /api/health` – Estado y si se usan datos mock.
-- `GET /api/funnel1?from=YYYY-MM-DD&to=YYYY-MM-DD&granularity=day|week|month` – Funnel 1 (métricas por período).
-- `GET /api/funnel2?from=YYYY-MM-DD&to=YYYY-MM-DD&granularity=day|week|month` – Funnel 2 (coincidencias/conversión).
+- `GET /api/health` - Estado y si se usan datos mock.
+- `GET /api/funnel1?from=YYYY-MM-DD&to=YYYY-MM-DD&granularity=day|week|month` - Funnel 1.
+- `GET /api/lineas` - Lineas disponibles para filtro.
+- `POST /api/reload` - Recarga de Excel.
 
 ## Repositorio Git
 
-El proyecto está preparado para subir a Git. **Los archivos Excel (`.xlsx`) no se versionan**: están en `.gitignore` para no subir datos sensibles.
+Los archivos Excel (`.xlsx`, `.xls`) no se versionan. Quien clone el repo debe colocar sus propios archivos en `data/`.
 
-- Quien clone el repo debe colocar sus propios Excel en `data/` (ver `data/README.md`). Sin ellos, la app usa datos de prueba.
+## Documentacion
 
-### Subir / actualizar en GitHub
-
-Repositorio: [github.com/alanchaparro/prospectos](https://github.com/alanchaparro/prospectos)
-
-```bash
-git add .
-git commit -m "Embudo de ventas: frontend, backend Python, Docker"
-git branch -M main
-git remote add origin https://github.com/alanchaparro/prospectos.git
-git push -u origin main
-```
-
-Para actualizar después de cambios: `git add .` → `git commit -m "mensaje"` → `git push`.
-
-## Documentación
-
-- `REGLAS_NEGOCIO_EMBUDO_VENTAS.md` – Reglas de negocio del embudo.
-- `ANALISIS_WEB_FUNNEL_VENTAS.md` – Análisis funcional y técnico.
+- `REGLAS_NEGOCIO_EMBUDO_VENTAS.md` - Reglas de negocio del embudo.
+- `ANALISIS_WEB_FUNNEL_VENTAS.md` - Analisis funcional y tecnico.
+- `docs/METRICAS_FUNNEL1.md` - Definicion de metricas visibles en la app.
+- `backend_python/README.md` - Detalle tecnico del backend Python.

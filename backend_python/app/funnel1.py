@@ -1,8 +1,8 @@
-# Funnel 1: métricas por período (prospectos, agendamientos, presupuestos, contratos)
+# Funnel 1: metricas por periodo
 from datetime import datetime, timedelta
-from typing import Any, Dict, List, Optional, Set
+from typing import Any, Dict, List, Set
 
-from .config import id_cliente_canonico, normalizar_linea, normalizar_telefono
+from .config import id_cliente_canonico, normalizar_linea
 from .funnel_dates import (
     get_period_end,
     get_period_start,
@@ -19,6 +19,14 @@ def _to_records(df):
     if hasattr(df, "to_dict"):
         return df.to_dict("records")
     return list(df)
+
+
+def _to_phone_set(values) -> Set[str]:
+    if not values:
+        return set()
+    if isinstance(values, (set, list, tuple)):
+        return {str(v) for v in values if v}
+    return {str(values)}
 
 
 def compute_funnel1(data: Dict[str, Any], params: Dict[str, Any]) -> List[Dict]:
@@ -43,10 +51,10 @@ def compute_funnel1(data: Dict[str, Any], params: Dict[str, Any]) -> List[Dict]:
         pautas = [p for p in pautas if p.get("linea") and normalizar_linea(p.get("linea")) == linea_norm]
         agendamientos = [a for a in agendamientos if a.get("linea") and normalizar_linea(a.get("linea")) == linea_norm]
 
-    # Índice: teléfono -> set de period_key donde ese tel aparece en Pautas (para prospectos viejos / otras fuentes)
     pautas_all = _to_records(data.get("pautas"))
     if linea_norm:
         pautas_all = [p for p in pautas_all if p.get("linea") and normalizar_linea(p.get("linea")) == linea_norm]
+
     telefono_a_periodos_pautas: Dict[str, Set[str]] = {}
     for p in pautas_all:
         tel = p.get("telefono")
@@ -55,12 +63,10 @@ def compute_funnel1(data: Dict[str, Any], params: Dict[str, Any]) -> List[Dict]:
         d = to_date(p.get("fecha_contacto")) if p.get("fecha_contacto") else None
         if not d:
             continue
-        pk = period_key(d, granularity)
-        telefono_a_periodos_pautas.setdefault(tel, set()).add(pk)
+        telefono_a_periodos_pautas.setdefault(tel, set()).add(period_key(d, granularity))
 
     agendamientos_in_range = [
-        a for a in agendamientos
-        if is_within_interval(to_date(a["fecha_agendamiento"]), from_date, range_end)
+        a for a in agendamientos if is_within_interval(to_date(a["fecha_agendamiento"]), from_date, range_end)
     ]
 
     clientes_map = {id_cliente_canonico(c.get("id")): c for c in clientes if id_cliente_canonico(c.get("id"))}
@@ -69,7 +75,9 @@ def compute_funnel1(data: Dict[str, Any], params: Dict[str, Any]) -> List[Dict]:
     for pc in presupuestos_contratos:
         d_pres = to_date(pc["fecha_presupuesto"]) if pc.get("fecha_presupuesto") else None
         d_cont = to_date(pc["fecha_contrato"]) if pc.get("fecha_contrato") else d_pres
-        en_rango = (d_pres and is_within_interval(d_pres, from_date, range_end)) or (d_cont and is_within_interval(d_cont, from_date, range_end))
+        en_rango = (d_pres and is_within_interval(d_pres, from_date, range_end)) or (
+            d_cont and is_within_interval(d_cont, from_date, range_end)
+        )
         if not en_rango:
             continue
         cid = id_cliente_canonico(pc.get("id_prospecto"))
@@ -135,7 +143,8 @@ def compute_funnel1(data: Dict[str, Any], params: Dict[str, Any]) -> List[Dict]:
         rec["presupuestos"].add(cid)
 
     clientes_con_contrato = [
-        c for c in clientes
+        c
+        for c in clientes
         if id_cliente_canonico(c.get("id"))
         and c.get("tiene_contrato")
         and c.get("contract_date")
@@ -145,16 +154,12 @@ def compute_funnel1(data: Dict[str, Any], params: Dict[str, Any]) -> List[Dict]:
         and (not linea_norm or (c.get("linea") and normalizar_linea(c["linea"]) == linea_norm))
     ]
 
-    contratos_unicos_por_periodo: Dict[str, Set[str]] = {}
     for c in clientes_con_contrato:
         cid = id_cliente_canonico(c["id"])
         d = to_date(c["contract_date"])
         rec = ensure_period(d)
         rec["contratos_total"] = rec.get("contratos_total", 0) + 1
         rec["contratos"].add(cid)
-        if rec["period"] not in contratos_unicos_por_periodo:
-            contratos_unicos_por_periodo[rec["period"]] = set()
-        contratos_unicos_por_periodo[rec["period"]].add(cid)
 
     if not clientes_con_contrato and not clientes:
         for pc in presupuestos_in_range:
@@ -165,7 +170,6 @@ def compute_funnel1(data: Dict[str, Any], params: Dict[str, Any]) -> List[Dict]:
                     rec["contratos_total"] = rec.get("contratos_total", 0) + 1
                     rec["contratos"].add(id_cliente_canonico(pc.get("id_prospecto")))
 
-    # Rellenar períodos vacíos
     cur = from_date
     while cur <= last_period_start:
         ensure_period(cur)
@@ -182,12 +186,12 @@ def compute_funnel1(data: Dict[str, Any], params: Dict[str, Any]) -> List[Dict]:
     result = []
     for key in sorted(periods.keys()):
         r = periods[key]
+        periodo_actual = r["period"]
+
         agendamientos_canon = {id_cliente_canonico(x) for x in r["agendamientos"] if id_cliente_canonico(x)}
         phones_agendamientos = set()
         for cid in agendamientos_canon:
-            tels = clientes_y_telefonos.get(cid)
-            if tels:
-                phones_agendamientos.update(tels if isinstance(tels, (set, list)) else [tels])
+            phones_agendamientos.update(_to_phone_set(clientes_y_telefonos.get(cid)))
 
         prospectos_agendados_set = set()
         for p in r.get("pautas_list") or []:
@@ -198,63 +202,79 @@ def compute_funnel1(data: Dict[str, Any], params: Dict[str, Any]) -> List[Dict]:
                 prospectos_agendados_set.add("tel:" + p["telefono"])
 
         prospecto_phones = {p["telefono"] for p in (r.get("pautas_list") or []) if p.get("telefono")}
-        prospecto_ids = {id_cliente_canonico(p.get("id_prospecto")) for p in (r.get("pautas_list") or []) if (id_cliente_canonico(p.get("id_prospecto")) or "").isdigit()}
+        prospecto_ids = {
+            id_cliente_canonico(p.get("id_prospecto"))
+            for p in (r.get("pautas_list") or [])
+            if (id_cliente_canonico(p.get("id_prospecto")) or "").isdigit()
+        }
         prospecto_client_ids = set(prospecto_ids)
         for cid, tels in (clientes_y_telefonos or {}).items():
-            if not tels:
-                continue
-            t = list(tels) if isinstance(tels, set) else [tels]
-            if any(ph in prospecto_phones for ph in t):
+            if any(ph in prospecto_phones for ph in _to_phone_set(tels)):
                 prospecto_client_ids.add(cid)
 
-        presupuestos_de_prospectos = sum(1 for x in r["presupuestos"] if x in prospecto_client_ids)
-        contratos_de_prospectos = sum(1 for x in r["contratos"] if x in prospecto_client_ids)
-
-        # Clasificar clientes únicos del periodo: mismo_mes (ya en prospecto_client_ids), prospectos_viejos, otras_fuentes
-        periodo_actual = r["period"]
-        prospectos_viejos_set: Set[str] = set()
-        otras_fuentes_set: Set[str] = set()
-        for cid in r["contratos"]:
-            if cid in prospecto_client_ids:
-                continue  # ya contado como del mes (clientes_unicos_de_prospectos)
-            phones = clientes_y_telefonos.get(cid)
-            if not phones:
-                otras_fuentes_set.add(cid)
-                continue
-            teles = list(phones) if isinstance(phones, (set, list)) else [phones]
-            en_pautas_otro_mes = False
-            for tel in teles:
-                periodos_pauta = telefono_a_periodos_pautas.get(tel) or set()
-                if not periodos_pauta:
+        def classify_stage_ids(stage_ids: Set[str]) -> Dict[str, Set[str]]:
+            same_period_ids: Set[str] = set()
+            old_ids: Set[str] = set()
+            other_ids: Set[str] = set()
+            for cid in stage_ids:
+                if cid in prospecto_client_ids:
+                    same_period_ids.add(cid)
                     continue
-                if periodo_actual in periodos_pauta:
-                    pass  # mismo mes ya está en prospecto_client_ids
+                phones = _to_phone_set(clientes_y_telefonos.get(cid))
+                if not phones:
+                    other_ids.add(cid)
+                    continue
+                matched_same_period = False
+                matched_old_period = False
+                for tel in phones:
+                    periodos_pauta = telefono_a_periodos_pautas.get(tel) or set()
+                    if periodo_actual in periodos_pauta:
+                        matched_same_period = True
+                    if any(periodo != periodo_actual for periodo in periodos_pauta):
+                        matched_old_period = True
+                if matched_same_period:
+                    same_period_ids.add(cid)
+                elif matched_old_period:
+                    old_ids.add(cid)
                 else:
-                    en_pautas_otro_mes = True
-                    break
-            if en_pautas_otro_mes:
-                prospectos_viejos_set.add(cid)
-            else:
-                otras_fuentes_set.add(cid)
+                    other_ids.add(cid)
+            return {"meta": same_period_ids, "viejos": old_ids, "otras": other_ids}
 
-        prospectos_viejos_count = len(prospectos_viejos_set)
-        otras_fuentes_count = len(otras_fuentes_set)
+        agendamientos_split = classify_stage_ids(r["agendamientos"])
+        presupuestos_split = classify_stage_ids(r["presupuestos"])
+        contratos_split = classify_stage_ids(r["contratos"])
+
+        presupuestos_de_prospectos = len(presupuestos_split["meta"])
+        contratos_de_prospectos = len(contratos_split["meta"])
+        prospectos_viejos_count = len(contratos_split["viejos"])
+        otras_fuentes_count = len(contratos_split["otras"])
         universo_total = len(r["prospectos"]) + prospectos_viejos_count + otras_fuentes_count
 
-        result.append({
-            "period": r["period"],
-            "label": r["label"],
-            "prospectos": len(r["prospectos"]),
-            "prospectos_agendados": len(prospectos_agendados_set),
-            "agendamientos": len(r["agendamientos"]),
-            "presupuestos": len(r["presupuestos"]),
-            "presupuestos_de_prospectos": presupuestos_de_prospectos,
-            "contratos": r.get("contratos_total") or len(r["contratos"]),
-            "contratos_de_prospectos": contratos_de_prospectos,
-            "clientes_unicos": len(r["contratos"]),
-            "clientes_unicos_de_prospectos": contratos_de_prospectos,
-            "prospectos_viejos": prospectos_viejos_count,
-            "otras_fuentes": otras_fuentes_count,
-            "universo_total": universo_total,
-        })
+        result.append(
+            {
+                "period": r["period"],
+                "label": r["label"],
+                "prospectos": len(r["prospectos"]),
+                "prospectos_agendados": len(prospectos_agendados_set),
+                "agendamientos": len(r["agendamientos"]),
+                "agendamientos_de_prospectos": len(agendamientos_split["meta"]),
+                "agendamientos_prospectos_viejos": len(agendamientos_split["viejos"]),
+                "agendamientos_otras_fuentes": len(agendamientos_split["otras"]),
+                "presupuestos": len(r["presupuestos"]),
+                "presupuestos_de_prospectos": presupuestos_de_prospectos,
+                "presupuestos_prospectos_viejos": len(presupuestos_split["viejos"]),
+                "presupuestos_otras_fuentes": len(presupuestos_split["otras"]),
+                "contratos": r.get("contratos_total") or len(r["contratos"]),
+                "contratos_de_prospectos": contratos_de_prospectos,
+                "contratos_prospectos_viejos": len(contratos_split["viejos"]),
+                "contratos_otras_fuentes": len(contratos_split["otras"]),
+                "clientes_unicos": len(r["contratos"]),
+                "clientes_unicos_de_prospectos": contratos_de_prospectos,
+                "clientes_unicos_prospectos_viejos": len(contratos_split["viejos"]),
+                "clientes_unicos_otras_fuentes": len(contratos_split["otras"]),
+                "prospectos_viejos": prospectos_viejos_count,
+                "otras_fuentes": otras_fuentes_count,
+                "universo_total": universo_total,
+            }
+        )
     return result

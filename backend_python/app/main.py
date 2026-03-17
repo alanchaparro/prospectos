@@ -5,16 +5,14 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 
-from . import funnel1, funnel2, load_data
+from . import funnel1, load_data
 
-# Tarea de carga en segundo plano (arranca con el servidor para ganar tiempo)
 _load_task: asyncio.Task | None = None
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     global _load_task
-    # Iniciar carga en segundo plano sin bloquear (evita 502 y reduce 504)
     _load_task = asyncio.create_task(asyncio.to_thread(load_data.get_datasets))
     yield
     _load_task = None
@@ -26,7 +24,6 @@ app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], all
 
 
 async def ensure_data():
-    """Espera a que los datos estén cargados (tarea en segundo plano o carga bajo demanda)."""
     global _load_task
     try:
         if _load_task is not None:
@@ -113,13 +110,12 @@ async def get_funnel1(
     linea: str = None,
 ):
     if not from_ or not to:
-        raise HTTPException(status_code=400, detail="Faltan parámetros: from, to (YYYY-MM-DD)")
+        raise HTTPException(status_code=400, detail="Faltan parametros: from, to (YYYY-MM-DD)")
     if granularity.lower() not in ("day", "week", "month"):
         raise HTTPException(status_code=400, detail="granularity debe ser day, week o month")
     try:
         await ensure_data()
         data = load_data.get_datasets()
-        # Convert DataFrames to list of dicts for funnel
         data = {
             "pautas": _to_records(data.get("pautas")),
             "agendamientos": _to_records(data.get("agendamientos")),
@@ -128,33 +124,6 @@ async def get_funnel1(
             "clientesYTelefonos": data.get("clientesYTelefonos"),
         }
         result = funnel1.compute_funnel1(data, {"from": from_, "to": to, "granularity": granularity.lower(), "linea": linea})
-        return {"granularity": granularity.lower(), "linea": linea or None, "data": result}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-@app.get("/api/funnel2")
-async def get_funnel2(
-    from_: str = Query(None, alias="from"),
-    to: str = Query(None, alias="to"),
-    granularity: str = "month",
-    linea: str = None,
-):
-    if not from_ or not to:
-        raise HTTPException(status_code=400, detail="Faltan parámetros: from, to (YYYY-MM-DD)")
-    if granularity.lower() not in ("day", "week", "month"):
-        raise HTTPException(status_code=400, detail="granularity debe ser day, week o month")
-    try:
-        await ensure_data()
-        data = load_data.get_datasets()
-        data = {
-            "pautas": _to_records(data.get("pautas")),
-            "agendamientos": _to_records(data.get("agendamientos")),
-            "presupuestosContratos": _to_records(data.get("presupuestosContratos")),
-            "clientes": _to_records(data.get("clientes")),
-            "clientesYTelefonos": data.get("clientesYTelefonos"),
-        }
-        result = funnel2.compute_funnel2(data, {"from": from_, "to": to, "granularity": granularity.lower(), "linea": linea})
         return {"granularity": granularity.lower(), "linea": linea or None, "data": result}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -172,4 +141,5 @@ async def reload():
 
 if __name__ == "__main__":
     import uvicorn
+
     uvicorn.run(app, host="0.0.0.0", port=4000)
