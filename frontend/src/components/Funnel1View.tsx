@@ -61,7 +61,7 @@ function aggregateStages(rows: Funnel1Row[]): FunnelStage[] {
     {
       key: 'contratos',
       label: 'Contratos',
-      total: sum('clientes_unicos'),
+      total: sum('contratos'),
       deProspectos: sum('contratos_de_prospectos'),
       prospectosViejos: sum('contratos_prospectos_viejos'),
       otros: sum('contratos_otras_fuentes'),
